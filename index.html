@@ -84,6 +84,7 @@
   .notes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
   .note{background:var(--card);border:2px solid var(--line);border-left:5px solid var(--purple);border-radius:14px;padding:14px 16px;font-size:13.5px;color:var(--muted)}
   .note b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
+  .form{scroll-margin-top:20px}
   .form h3{margin:0 0 4px;font-size:20px;font-weight:800}
   .form p{margin:0 0 16px;color:var(--muted);font-size:14px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -94,7 +95,13 @@
   textarea{min-height:110px;resize:vertical}
   button{margin-top:16px;background:var(--purple);color:#fff;border:0;border-radius:12px;padding:13px 26px;font:inherit;font-weight:800;font-size:15px;cursor:pointer}
   button:hover{filter:brightness(1.1)}
-  .msg{margin-top:12px;font-size:13.5px;color:#c9a3ff;min-height:20px}
+  button:disabled{opacity:.6;cursor:not-allowed;filter:none}
+  .msg{margin-top:12px;font-size:13.5px;color:#c9a3ff;min-height:0}
+  .msg:empty{display:none}
+  .msg.ok{color:var(--green)}
+  .msg.err{color:#ff8a8a}
+  /* hidden spam-trap field (real visitors never see or fill it) */
+  .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;opacity:0}
 
   /* ---------- TABLET ---------- */
   @media (max-width:760px){
@@ -240,7 +247,7 @@
 
     <div class="notes" id="av-notes"></div>
 
-    <div class="card form">
+    <div class="card form" id="request-form">
       <h3>Need a different time?</h3>
       <p>Tell me what works for you and I'll confirm by email.</p>
       <form id="av-form" novalidate>
@@ -254,8 +261,10 @@
           <div><label for="av-time">Your preferred day &amp; time</label><input id="av-time" placeholder="e.g. Wednesday 9:00 AM (your timezone)"></div>
           <div class="full"><label for="av-details">Details</label><textarea id="av-details" placeholder="Tell me about the work..."></textarea></div>
         </div>
-        <button type="submit">Send</button>
-        <div class="msg" id="av-msg" role="status"></div>
+        <!-- spam trap: leave empty -->
+        <div class="hp" aria-hidden="true"><label for="av-company">Company</label><input id="av-company" tabindex="-1" autocomplete="off"></div>
+        <button type="submit" id="av-btn">Send</button>
+        <div class="msg" id="av-msg" role="status" aria-live="polite"></div>
       </form>
     </div>
   </section>
@@ -278,6 +287,10 @@ document.querySelectorAll('.count').forEach(function(el){
   var REMOTE    = {start:'16:30', end:'01:30'};   // Mon–Sat, also full-time & contract
   var SUNDAY    = {start:'09:30', end:'13:00'};   // Sunday (all job types)
   var DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  /* ======================================================================================= */
+
+  /* ===== PASTE YOUR FORMSPREE FORM ID HERE (the part after /f/ in your endpoint URL) ===== */
+  var FORM_ID = 'YOUR_FORM_ID';
   /* ======================================================================================= */
 
   function m(t){var p=t.split(':');return (+p[0])*60+(+p[1]);}
@@ -328,23 +341,49 @@ document.querySelectorAll('.count').forEach(function(el){
     '<div class="note"><b>Remote, full-time &amp; contract</b>Mon–Sat · '+range(REMOTE)+'</div>'+
     '<div class="note"><b>Sunday</b>'+range(SUNDAY)+'</div>';
 
-  function to(){return ['aklilueyerusalem05','gmail.com'].join('@');}
+  /* ---- send the request automatically (stored + emailed by Formspree) ---- */
+  var form=document.getElementById('av-form'),
+      btn=document.getElementById('av-btn'),
+      msg=document.getElementById('av-msg');
 
-  document.getElementById('av-form').addEventListener('submit',function(e){
+  function show(text,cls){msg.className='msg'+(cls?' '+cls:'');msg.textContent=text;}
+
+  form.addEventListener('submit',function(e){
     e.preventDefault();
     var g=function(id){return document.getElementById(id).value.trim();};
-    var name=g('av-name'),mail=g('av-email'),title=g('av-title'),type=document.getElementById('av-type').value,
-        time=g('av-time'),details=g('av-details'),msg=document.getElementById('av-msg');
-    if(!name||!mail||!title){msg.textContent='Please fill in your name, email and title.';return;}
-    if(!/^\S+@\S+\.\S+$/.test(mail)){msg.textContent='Please enter a valid email address.';return;}
-    var subject='[GitHub] Availability request – '+title;
-    var body='Hello,\n\nI would like to confirm your availability.\n\n'+
-      'Source: GitHub portfolio – availability form\n------------------------------------------\n'+
-      'Name: '+name+'\nEmail: '+mail+'\nTitle / Project: '+title+'\nJob type: '+type+'\n'+
-      'Preferred day & time: '+(time||'Not specified')+'\n\nDetails:\n'+(details||'—')+
-      '\n\n------------------------------------------\nPlease confirm if this time works.\n\nThank you,\n'+name;
-    window.location.href='mailto:'+to()+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
-    msg.textContent='Opening your email app with the message ready — press send there to confirm.';
+    var name=g('av-name'),mail=g('av-email'),title=g('av-title'),
+        type=document.getElementById('av-type').value,
+        time=g('av-time'),details=g('av-details');
+
+    if(g('av-company')){return;}                       // bots fill the hidden field: ignore
+    if(!name||!mail||!title){show('Please fill in your name, email and title.','err');return;}
+    if(!/^\S+@\S+\.\S+$/.test(mail)){show('Please enter a valid email address.','err');return;}
+    if(FORM_ID==='YOUR_FORM_ID'){show('The form is not connected yet. Please try again later.','err');return;}
+
+    btn.disabled=true;btn.textContent='Sending…';show('');
+
+    fetch('https://formspree.io/f/'+FORM_ID,{
+      method:'POST',
+      headers:{'Accept':'application/json','Content-Type':'application/json'},
+      body:JSON.stringify({
+        _subject:'[GitHub] Availability request – '+title,
+        name:name,
+        email:mail,                                    // Formspree uses this as the reply-to
+        title:title,
+        job_type:type,
+        preferred_day_and_time:time||'Not specified',
+        details:details||'—',
+        source:'GitHub portfolio – availability form'
+      })
+    }).then(function(r){
+      if(!r.ok){throw new Error('bad response');}
+      form.reset();
+      show('Thank you! Your request was sent. I will confirm by email.','ok');
+    }).catch(function(){
+      show('Sorry, something went wrong. Please try again in a moment.','err');
+    }).then(function(){
+      btn.disabled=false;btn.textContent='Send';
+    });
   });
 })();
 </script>
