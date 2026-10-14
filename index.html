@@ -383,8 +383,13 @@ document.querySelectorAll('.count').forEach(function(el){
     if(FORM_ID==='YOUR_FORM_ID'){
       /* automatic sending not set up: open Gmail with the message ready */
       var u0=emailUrls(name,mail,title,type,time,details);
-      window.open(u0.gmail,'_blank','noopener');
-      showEmailOptions('Your message is ready. Press Send in the email window to deliver it. Nothing opened?',u0,'ok');
+      var w=window.open(u0.gmail,'_blank');
+      if(w){
+        try{w.opener=null;}catch(err){}
+        show('');                                      // Gmail opened: show nothing on the page
+      }else{
+        showEmailOptions("Gmail didn't open.",u0,'err'); // only shown if a pop-up blocker stopped it
+      }
       return;
     }
 
