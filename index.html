@@ -100,6 +100,7 @@
   .msg:empty{display:none}
   .msg.ok{color:var(--green)}
   .msg.err{color:#ff8a8a}
+  .msg a{color:inherit;font-weight:700;text-decoration:underline}
   /* hidden spam-trap field (real visitors never see or fill it) */
   .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;opacity:0}
 
@@ -348,6 +349,27 @@ document.querySelectorAll('.count').forEach(function(el){
 
   function show(text,cls){msg.className='msg'+(cls?' '+cls:'');msg.textContent=text;}
 
+  /* ---- email route: Gmail in the browser, or the visitor's email app ---- */
+  function owner(){return ['aklilueyerusalem05','gmail.com'].join('@');}
+  function emailUrls(name,mail,title,type,time,details){
+    var subject='[GitHub] Availability request – '+title;
+    var body='Hello,\n\nI would like to confirm your availability.\n\n'+
+      'Name: '+name+'\nEmail: '+mail+'\nTitle / Project: '+title+'\nJob type: '+type+'\n'+
+      'Preferred day & time: '+(time||'Not specified')+'\n\nDetails:\n'+(details||'—')+
+      '\n\nPlease confirm if this time works.\n\nThank you,\n'+name;
+    return {
+      gmail:'https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(owner())+
+            '&su='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body),
+      mailto:'mailto:'+owner()+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body)
+    };
+  }
+  function showEmailOptions(intro,u,cls){
+    msg.className='msg '+cls;msg.textContent=intro+' ';
+    var a=document.createElement('a');a.href=u.gmail;a.target='_blank';a.rel='noopener';a.textContent='Open Gmail';
+    var b=document.createElement('a');b.href=u.mailto;b.textContent='Open my email app';
+    msg.appendChild(a);msg.appendChild(document.createTextNode(' · '));msg.appendChild(b);
+  }
+
   form.addEventListener('submit',function(e){
     e.preventDefault();
     var g=function(id){return document.getElementById(id).value.trim();};
@@ -358,7 +380,13 @@ document.querySelectorAll('.count').forEach(function(el){
     if(g('av-company')){return;}                       // bots fill the hidden field: ignore
     if(!name||!mail||!title){show('Please fill in your name, email and title.','err');return;}
     if(!/^\S+@\S+\.\S+$/.test(mail)){show('Please enter a valid email address.','err');return;}
-    if(FORM_ID==='YOUR_FORM_ID'){show('The form is not connected yet. Please try again later.','err');return;}
+    if(FORM_ID==='YOUR_FORM_ID'){
+      /* automatic sending not set up: open Gmail with the message ready */
+      var u0=emailUrls(name,mail,title,type,time,details);
+      window.open(u0.gmail,'_blank','noopener');
+      showEmailOptions('Your message is ready. Press Send in the email window to deliver it. Nothing opened?',u0,'ok');
+      return;
+    }
 
     btn.disabled=true;btn.textContent='Sending…';show('');
 
@@ -380,7 +408,7 @@ document.querySelectorAll('.count').forEach(function(el){
       form.reset();
       show('Thank you! Your request was sent. I will confirm by email.','ok');
     }).catch(function(){
-      show('Sorry, something went wrong. Please try again in a moment.','err');
+      showEmailOptions('Automatic sending did not work. Please send it by email instead:',emailUrls(name,mail,title,type,time,details),'err');
     }).then(function(){
       btn.disabled=false;btn.textContent='Send';
     });
